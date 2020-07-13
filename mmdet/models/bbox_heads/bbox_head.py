@@ -9,6 +9,7 @@ from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
 
+#TODO: this should be removed
 import pickle
 train_info = pickle.load(open('./lvis_train_cats_info.pt', 'rb'))
 val_info = pickle.load(open('./lvis_val_cats_info.pt', 'rb'))
