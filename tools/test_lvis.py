@@ -41,7 +41,7 @@ def single_gpu_test(model, data_loader, cal_head, dataset_for_support, show=Fals
     return results
 
 
-def multi_gpu_test(model, data_loader, tmpdir=None):
+def multi_gpu_test(model, data_loader, cal_head, tmpdir=None, show=False):
     model.eval()
     results = []
     dataset = data_loader.dataset
@@ -50,7 +50,7 @@ def multi_gpu_test(model, data_loader, tmpdir=None):
         prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
         with torch.no_grad():
-            result = model(return_loss=False, rescale=True, **data)
+            result = model(return_loss=False, rescale=not show, cal_head=cal_head, **data)
         results.append(result)
 
         if rank == 0:
@@ -139,6 +139,7 @@ def parse_args():
 
     parser.add_argument(
         '--head_ckpt',
+        default='3fc_ft',
         help='checkpoint name of calibrated head',
         type=str)
 
@@ -225,7 +226,8 @@ def main():
         outputs = single_gpu_test(model, data_loader, calibrated_head, build_dataset(cfg.data.train), args.show)
     else:
         model = MMDistributedDataParallel(model.cuda())
-        outputs = multi_gpu_test(model, data_loader, args.tmpdir)
+        calibrated_head = MMDistributedDataParallel(calibrated_head.cuda())
+        outputs = multi_gpu_test(model, data_loader, calibrated_head, args.show, args.tmpdir)
 
     rank, _ = get_dist_info()
     if args.out and rank == 0:
