@@ -21,27 +21,26 @@ from cls_head_models.simple3fc import simple3fc
 import pickle
 from collections import OrderedDict
 
-def single_gpu_test(model, data_loader, cal_head, dataset_for_support, show=False):
+def single_gpu_test(model, data_loader, cal_head, show=False):
     model.eval()
     results = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
         with torch.no_grad():
-            result = model(return_loss=False, rescale=not show, dataset_for_support=dataset_for_support,
-                           dataset_val = data_loader.dataset, cal_head=cal_head, **data)
+            result = model(return_loss=False, rescale=not show, cal_head=cal_head, **data)
         results.append(result)
 
         if show:
             model.module.show_result(data, result, dataset.img_norm_cfg)
 
-        batch_size = data['img'].data[0].size(0)
+        batch_size = data['img'].data.size(0)
         for _ in range(batch_size):
             prog_bar.update()
     return results
 
 
-def multi_gpu_test(model, data_loader, cal_head, tmpdir=None, show=False):
+def multi_gpu_test(model, data_loader, cal_head, show=False, tmpdir=None):
     model.eval()
     results = []
     dataset = data_loader.dataset
@@ -54,7 +53,7 @@ def multi_gpu_test(model, data_loader, cal_head, tmpdir=None, show=False):
         results.append(result)
 
         if rank == 0:
-            batch_size = data['img'][0].size(0)
+            batch_size = data['img'].data.size(0)
             for _ in range(batch_size * world_size):
                 prog_bar.update()
 
@@ -167,7 +166,7 @@ def main():
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
     cfg.model.pretrained = None
-    cfg.data.test.test_mode = False
+    # cfg.data.test.test_mode = False
 
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
@@ -180,7 +179,7 @@ def main():
     # TODO: support multiple images per gpu (only minor changes are needed)
     dataset = build_dataset(cfg.data.test)
     ## uncomment to only eval on first 100 imgs
-    # dataset.img_infos = dataset.img_infos[:100]
+    # dataset.img_infos = dataset.img_infos[:20]
 
     data_loader = build_dataloader(
         dataset,
@@ -223,7 +222,7 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, calibrated_head, build_dataset(cfg.data.train), args.show)
+        outputs = single_gpu_test(model, data_loader, calibrated_head, args.show)
     else:
         model = MMDistributedDataParallel(model.cuda())
         calibrated_head = MMDistributedDataParallel(calibrated_head.cuda())

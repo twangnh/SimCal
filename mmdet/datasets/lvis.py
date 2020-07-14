@@ -3,7 +3,7 @@ import numpy as np
 
 from .custom import CustomDataset
 from .registry import DATASETS
-from lvis.lvis import LVIS
+from lvis_api.lvis.lvis import LVIS
 
 @DATASETS.register_module
 class LvisDataset(CustomDataset):

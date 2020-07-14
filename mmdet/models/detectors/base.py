@@ -89,7 +89,7 @@ class BaseDetector(nn.Module):
         else:
             if 'gt_bboxes' in kwargs:
                 return self.forward_test([img], img_meta, **kwargs)
-            return self.forward_test(img, img_meta, **kwargs)
+            return self.forward_test([img], img_meta, **kwargs)
 
     def show_result(self,
                     data,

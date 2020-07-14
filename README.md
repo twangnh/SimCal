@@ -18,7 +18,24 @@ This project is released under the [Apache 2.0 license](LICENSE).
 
 Please refer to [INSTALL.md](INSTALL.md) for installation and dataset preparation.
 
-For [LVIS](https://www.lvisdataset.org/dataset) dataset, only lvis validation set is needed, please arrange the data as:
+Or run the following installation script:
+###
+    conda create -n simcal_mmdet python=3.7
+    conda activate simcal_mmdet
+    echo "python path"
+    which python
+    conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit=9.2 -c pytorch
+    pip install cython==0.29.12 mmcv==0.2.16 matplotlib terminaltables
+    pip install "git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI"
+    pip install opencv-python-headless
+    pip install Pillow==6.1
+    pip install numpy==1.17.1 --no-deps
+    pip install -v -e .
+    
+    mkdir data
+    ln -s $COCO_ROOT data
+Please do not install official lvis api, as we have modified with a local copy in the repository.
+For [LVIS](https://www.lvisdataset.org/dataset) dataset, please arrange the data as:
 
 ```
 mmdetection

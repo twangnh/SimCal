@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from sklearn.metrics import f1_score
+# from sklearn.metrics import f1_score
 import importlib
 # import pdb
 import pickle

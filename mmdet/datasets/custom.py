@@ -315,21 +315,25 @@ class CustomDataset(Dataset):
                 _proposal = None
             return _img, _img_meta, _proposal
 
-        imgs = []
-        img_metas = []
-        proposals = []
-        for scale in self.img_scales:
-            _img, _img_meta, _proposal = prepare_single(
-                img, scale, False, proposal)
-            imgs.append(_img)
-            img_metas.append(DC(_img_meta, cpu_only=True))
-            proposals.append(_proposal)
-            if self.flip_ratio > 0:
-                _img, _img_meta, _proposal = prepare_single(
-                    img, scale, True, proposal)
-                imgs.append(_img)
-                img_metas.append(DC(_img_meta, cpu_only=True))
-                proposals.append(_proposal)
+        assert len(self.img_scales)==1 #multi scale not implemented
+        _img, _img_meta, _proposal = prepare_single(
+            img, self.img_scales[0], False, proposal)
+        imgs=_img
+        img_metas=DC(_img_meta, cpu_only=True)
+        proposals=_proposal
+
+        # for scale in self.img_scales:
+        #     _img, _img_meta, _proposal = prepare_single(
+        #         img, scale, False, proposal)
+        #     imgs.append(_img)
+        #     img_metas.append(DC(_img_meta, cpu_only=True))
+        #     proposals.append(_proposal)
+        #     if self.flip_ratio > 0:
+        #         _img, _img_meta, _proposal = prepare_single(
+        #             img, scale, True, proposal)
+        #         imgs.append(_img)
+        #         img_metas.append(DC(_img_meta, cpu_only=True))
+        #         proposals.append(_proposal)
         data = dict(img=imgs, img_meta=img_metas)
         if self.proposals is not None:
             data['proposals'] = proposals

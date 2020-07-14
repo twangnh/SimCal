@@ -5,7 +5,7 @@ from collections import OrderedDict
 import torch
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import DistSamplerSeedHook, Runner, obj_from_dict
-from protonets_models.runner_protonet_training import Runner_Proto
+# from protonets_models.runner_protonet_training import Runner_Proto
 
 from mmdet import datasets
 from mmdet.core import (CocoDistEvalmAPHook, CocoDistEvalRecallHook,

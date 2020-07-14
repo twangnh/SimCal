@@ -2,8 +2,11 @@ import mmcv
 import numpy as np
 # from pycocotools.coco import COCO
 # from pycocotools.cocoeval import COCOeval
-from lvis.lvis import LVIS
-from lvis import LVISEval
+# from lvis.lvis import LVIS
+# from lvis import LVISEval
+
+from lvis_api.lvis.lvis import LVIS
+from lvis_api.lvis import LVISEval
 
 from .recall import eval_recalls
 import pickle
@@ -19,7 +22,7 @@ def lvis_eval(result_files, result_types, lvis, max_dets=(100, 300, 1000), exist
 
     if mmcv.is_str(lvis):
         lvis = LVIS(lvis)
-    assert isinstance(lvis, LVIS)
+    # assert isinstance(lvis, LVIS)
 
     if result_types == ['proposal_fast']:
         ar = lvis_fast_eval_recall(result_files, lvis, np.array(max_dets))
