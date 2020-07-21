@@ -11,6 +11,7 @@ from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, load_checkpoint
 
 from mmdet.apis import init_dist
+from mmdet.core import coco_eval
 from mmdet.core import lvis_eval, results2json, wrap_fp16_model
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
@@ -179,7 +180,7 @@ def main():
     # TODO: support multiple images per gpu (only minor changes are needed)
     dataset = build_dataset(cfg.data.test)
     ## uncomment to only eval on first 100 imgs
-    # dataset.img_infos = dataset.img_infos[:20]
+    dataset.img_infos = dataset.img_infos[:20]
 
     data_loader = build_dataloader(
         dataset,
@@ -206,17 +207,23 @@ def main():
 
     def load_ckpt(ncm_model, cal_head):
         print('load cls head {}'.format('{}/{}.pth'.format(cfg.work_dir, cal_head)))
-        epoch = torch.load('{}/{}_epoch.pth'.format(cfg.work_dir, cal_head))
+        # epoch = torch.load('{}/{}_epoch.pth'.format(cfg.work_dir, cal_head))
         load_checkpoint(ncm_model, '{}/{}.pth'.format(cfg.work_dir, cal_head))
-        return epoch
+        # return epoch
 
     print('use {}'.format(args.cal_head))
-    if '2fc_rand' in args.cal_head:
-        calibrated_head = simple2fc().cuda()
-    elif '3fc_rand' in args.cal_head or '3fc_ft' in args.cal_head:
-        calibrated_head = simple3fc().cuda()
-
-    epoch = load_ckpt(calibrated_head, args.head_ckpt)
+    if len(dataset.CLASSES) == 1230:##lvis
+        if '2fc_rand' in args.cal_head:
+            calibrated_head = simple2fc().cuda()
+        elif '3fc_rand' in args.cal_head or '3fc_ft' in args.cal_head:
+            calibrated_head = simple3fc().cuda()
+    elif len(dataset.CLASSES) ==80:## coco
+        if '2fc_rand' in args.cal_head:
+            calibrated_head = simple2fc(num_classes=81).cuda()
+        elif '3fc_rand' in args.cal_head or '3fc_ft' in args.cal_head:
+            calibrated_head = simple3fc(num_classes=81).cuda()
+    # epoch = load_ckpt(calibrated_head, args.head_ckpt)
+    load_ckpt(calibrated_head, args.head_ckpt)
     calibrated_head.eval()
 
 
@@ -233,24 +240,28 @@ def main():
         print('\nwriting results to {}'.format(args.out))
         # mmcv.dump(outputs, args.out)
         eval_types = args.eval
-        if eval_types:
+        if len(dataset.CLASSES) == 1230:
+            if eval_types:
 
-            if eval_types == ['proposal_fast']:
-                result_file = args.out
-                lvis_eval(result_file, eval_types, dataset.coco)
-            else:
-                if not isinstance(outputs[0], dict):
-                    result_files = results2json(dataset, outputs, args.out, dump=False)
-                    print('Starting evaluate {}'.format(' and '.join(eval_types)))
-                    lvis_eval(result_files, eval_types, dataset.lvis)
+                if eval_types == ['proposal_fast']:
+                    result_file = args.out
+                    lvis_eval(result_file, eval_types, dataset.coco)
                 else:
-                    for name in outputs[0]:
-                        print('\nEvaluating {}'.format(name))
-                        outputs_ = [out[name] for out in outputs]
-                        result_file = args.out + '.{}'.format(name)
-                        result_files = results2json(dataset, outputs_,
-                                                    result_file)
-                        lvis_eval(result_files, eval_types, dataset.coco)
+                    if not isinstance(outputs[0], dict):
+                        result_files = results2json(dataset, outputs, args.out, dump=False)
+                        print('Starting evaluate {}'.format(' and '.join(eval_types)))
+                        lvis_eval(result_files, eval_types, dataset.lvis)
+                    else:
+                        for name in outputs[0]:
+                            print('\nEvaluating {}'.format(name))
+                            outputs_ = [out[name] for out in outputs]
+                            result_file = args.out + '.{}'.format(name)
+                            result_files = results2json(dataset, outputs_,
+                                                        result_file)
+                            lvis_eval(result_files, eval_types, dataset.coco)
+        elif len(dataset.CLASSES) == 80:
+            result_files = results2json(dataset, outputs, args.out, dump=False)
+            coco_eval(result_files, args.eval, dataset.coco)
 
     # Save predictions in the COCO json format
     if args.json_out and rank == 0:

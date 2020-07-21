@@ -168,7 +168,7 @@ class BBoxHead(nn.Module):
             # print('use lvis')
 
             ##for ablation of cat position
-            threshold = 300
+            threshold = 100
             # print('cat threshold {}'.format(threshold))
             lessthan_threshold_clsid = [k for i, (k, v) in enumerate(train_on_val_cls_label_to_info.items()) if v < threshold]
             scores[:, lessthan_threshold_clsid] = cal_cls_score[:, lessthan_threshold_clsid]

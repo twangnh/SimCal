@@ -1,5 +1,6 @@
 import numpy as np
-from pycocotools.coco import COCO
+# from pycocotools.coco import COCO
+from cocoapi.PythonAPI.pycocotools.coco import COCO
 
 from .custom import CustomDataset
 from .registry import DATASETS

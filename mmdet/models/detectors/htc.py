@@ -7,6 +7,8 @@ from .. import builder
 from ..registry import DETECTORS
 from .cascade_rcnn import CascadeRCNN
 
+import os
+import os.path as osp
 
 @DETECTORS.register_module
 class HybridTaskCascade(CascadeRCNN):
@@ -63,11 +65,13 @@ class HybridTaskCascade(CascadeRCNN):
             bbox_feats += bbox_semantic_feat
 
         cls_score, bbox_pred = bbox_head(bbox_feats)
+##
 
         bbox_targets = bbox_head.get_target(sampling_results, gt_bboxes,
                                             gt_labels, rcnn_train_cfg)
-        loss_bbox = bbox_head.loss(cls_score, bbox_pred, *bbox_targets)
-        return loss_bbox, rois, bbox_targets, bbox_pred
+        bbox_targets_temp = (bbox_targets[0],) + (bbox_targets[2:])
+        loss_bbox = bbox_head.loss(cls_score, bbox_pred, *bbox_targets_temp)
+        return loss_bbox, rois, bbox_targets, bbox_pred, bbox_feats
 
     def _mask_forward_train(self,
                             stage,
@@ -110,7 +114,7 @@ class HybridTaskCascade(CascadeRCNN):
         loss_mask = mask_head.loss(mask_pred, mask_targets, pos_labels)
         return loss_mask
 
-    def _bbox_forward_test(self, stage, x, rois, semantic_feat=None):
+    def _bbox_forward_test(self, stage, x, rois, olongtailmodel, semantic_feat=None):
         bbox_roi_extractor = self.bbox_roi_extractor[stage]
         bbox_head = self.bbox_head[stage]
         bbox_feats = bbox_roi_extractor(
@@ -123,7 +127,9 @@ class HybridTaskCascade(CascadeRCNN):
                     bbox_semantic_feat, bbox_feats.shape[-2:])
             bbox_feats += bbox_semantic_feat
         cls_score, bbox_pred = bbox_head(bbox_feats)
-        return cls_score, bbox_pred
+        longtailmodel_cls_score = olongtailmodel(bbox_feats)
+
+        return cls_score, longtailmodel_cls_score, bbox_pred
 
     def _mask_forward_test(self, stage, x, bboxes, semantic_feat=None):
         mask_roi_extractor = self.mask_roi_extractor[stage]
@@ -153,6 +159,46 @@ class HybridTaskCascade(CascadeRCNN):
             mask_pred = mask_head(mask_feats)
         return mask_pred
 
+    def forward_dummy(self, img):
+        outs = ()
+        # backbone
+        x = self.extract_feat(img)
+        # rpn
+        if self.with_rpn:
+            rpn_outs = self.rpn_head(x)
+            outs = outs + (rpn_outs, )
+        proposals = torch.randn(1000, 4).cuda()
+        # semantic head
+        if self.with_semantic:
+            _, semantic_feat = self.semantic_head(x)
+        else:
+            semantic_feat = None
+        # bbox heads
+        rois = bbox2roi([proposals])
+        for i in range(self.num_stages):
+            cls_score, bbox_pred = self._bbox_forward_test(
+                i, x, rois, semantic_feat=semantic_feat)
+            outs = outs + (cls_score, bbox_pred)
+        # mask heads
+        if self.with_mask:
+            mask_rois = rois[:100]
+            mask_roi_extractor = self.mask_roi_extractor[-1]
+            mask_feats = mask_roi_extractor(
+                x[:len(mask_roi_extractor.featmap_strides)], mask_rois)
+            if self.with_semantic and 'mask' in self.semantic_fusion:
+                mask_semantic_feat = self.semantic_roi_extractor(
+                    [semantic_feat], mask_rois)
+                mask_feats += mask_semantic_feat
+            last_feat = None
+            for i in range(self.num_stages):
+                mask_head = self.mask_head[i]
+                if self.mask_info_flow:
+                    mask_pred, last_feat = mask_head(mask_feats, last_feat)
+                else:
+                    mask_pred = mask_head(mask_feats)
+                outs = outs + (mask_pred, )
+        return outs
+
     def forward_train(self,
                       img,
                       img_meta,
@@ -171,9 +217,9 @@ class HybridTaskCascade(CascadeRCNN):
             rpn_outs = self.rpn_head(x)
             rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta,
                                           self.train_cfg.rpn)
-            rpn_losses = self.rpn_head.loss(
-                *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
-            losses.update(rpn_losses)
+            # rpn_losses = self.rpn_head.loss(
+            #     *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+            # losses.update(rpn_losses)
 
             proposal_cfg = self.train_cfg.get('rpn_proposal',
                                               self.test_cfg.rpn)
@@ -186,11 +232,13 @@ class HybridTaskCascade(CascadeRCNN):
         # 2 outputs: segmentation prediction and embedded features
         if self.with_semantic:
             semantic_pred, semantic_feat = self.semantic_head(x)
-            loss_seg = self.semantic_head.loss(semantic_pred, gt_semantic_seg)
-            losses['loss_semantic_seg'] = loss_seg
+            # loss_seg = self.semantic_head.loss(semantic_pred, gt_semantic_seg)
+            losses['loss_semantic_seg'] = 0.0
         else:
             semantic_feat = None
 
+##collect rois
+        collected_rois = []
         for i in range(self.num_stages):
             self.current_stage = i
             rcnn_train_cfg = self.train_cfg.rcnn[i]
@@ -218,11 +266,19 @@ class HybridTaskCascade(CascadeRCNN):
                 sampling_results.append(sampling_result)
 
             # bbox head forward and loss
-            loss_bbox, rois, bbox_targets, bbox_pred = \
+            loss_bbox, rois, bbox_targets, bbox_pred, bbox_feats = \
                 self._bbox_forward_train(
                     i, x, sampling_results, gt_bboxes, gt_labels,
                     rcnn_train_cfg, semantic_feat)
             roi_labels = bbox_targets[0]
+
+##  collect rois
+            labels, gt_num, label_weights, bbox_targets, bbox_weights = bbox_targets
+            neg_feats = bbox_feats[labels==0]
+            pos_feats = bbox_feats[labels>0]
+            pos_label = labels[labels>0]
+
+            collected_rois.append((neg_feats, gt_num, pos_feats, pos_label))
 
             for name, value in loss_bbox.items():
                 losses['s{}.{}'.format(i, name)] = (
@@ -264,9 +320,11 @@ class HybridTaskCascade(CascadeRCNN):
                     proposal_list = self.bbox_head[i].refine_bboxes(
                         rois, roi_labels, bbox_pred, pos_is_gts, img_meta)
 
-        return losses
+        # return neg_feats, gt_num, pos_feats, pos_label
 
-    def simple_test(self, img, img_meta, proposals=None, rescale=False):
+        return collected_rois[0]+collected_rois[1]+collected_rois[2]
+
+    def simple_test(self, img, img_meta, proposals=None, rescale=False, **kwargs):
         x = self.extract_feat(img)
         proposal_list = self.simple_test_rpn(
             x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
@@ -287,11 +345,13 @@ class HybridTaskCascade(CascadeRCNN):
         rcnn_test_cfg = self.test_cfg.rcnn
 
         rois = bbox2roi(proposal_list)
+        olongtail_cls_score_all = []
         for i in range(self.num_stages):
             bbox_head = self.bbox_head[i]
-            cls_score, bbox_pred = self._bbox_forward_test(
-                i, x, rois, semantic_feat=semantic_feat)
+            cls_score, olongtail_cls_score, bbox_pred = self._bbox_forward_test(
+                i, x, rois, kwargs['olongtailmodel'][i], semantic_feat=semantic_feat)
             ms_scores.append(cls_score)
+            olongtail_cls_score_all.append(olongtail_cls_score)
 
             if self.test_cfg.keep_all_stages:
                 det_bboxes, det_labels = bbox_head.get_det_bboxes(
@@ -328,9 +388,29 @@ class HybridTaskCascade(CascadeRCNN):
                                                   img_meta[0])
 
         cls_score = sum(ms_scores) / float(len(ms_scores))
+
+        ##
+        olongtail_cls_score_all = torch.stack(olongtail_cls_score_all).mean(0)
+
+
+        ##to saveout the cls head prediction for ensembling
+        # olongtail_scores = F.softmax(olongtail_cls_score_all, dim=1)
+        # save_idx = img_meta[0]['filename'].split('/')[-1].split('.')[0]
+        # dets_save_path = osp.join('./ensemble_non_ssd', 'ensemble_valset', 'det', 'htc_31d9_x101_64d_ms_dcn_longtail_clsscore',
+        #                           save_idx + '_')
+        # # dets_save_path = osp.join('./ensemble', 'ensemble_testset', 'det', 'htc_31d9_x101_64d_ms_dcn_longtail_clsscore',
+        # #                           save_idx + '_')
+        #
+        # # if not osp.exists(osp.join('./ensemble', 'ensemble_testset', 'det', 'htc_31d9_x101_64d_ms_dcn_longtail_clsscore')):
+        # #     os.mkdir(osp.join('./ensemble', 'ensemble_testset', 'det', 'htc_31d9_x101_64d_ms_dcn_longtail_clsscore'))
+        #
+        # torch.save(olongtail_scores, dets_save_path + 'dets_cls.pt')
+        # return 0
+
         det_bboxes, det_labels = self.bbox_head[-1].get_det_bboxes(
             rois,
             cls_score,
+            olongtail_cls_score_all,
             bbox_pred,
             img_shape,
             scale_factor,

@@ -177,7 +177,7 @@ evaluation = dict(interval=1)
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/coco_longtail'
-load_from = './work_dirs/coco_longtail/epoch_12.pth'
+work_dir = './work_dirs/mask_rcnn_r50_fpn_1x_cocolt_agnostic'
+load_from = './work_dirs/mask_rcnn_r50_fpn_1x_cocolt_agnostic/epoch_12.pth'
 resume_from = None
 workflow = [('train', 1)]

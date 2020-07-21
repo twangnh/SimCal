@@ -1,7 +1,7 @@
 import mmcv
 import numpy as np
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
+from cocoapi.PythonAPI.pycocotools.coco import COCO
+from cocoapi.PythonAPI.pycocotools.cocoeval import COCOeval
 
 from .recall import eval_recalls
 

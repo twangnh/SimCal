@@ -285,13 +285,13 @@ def _non_dist_train(model, dataset, cfg, validate=False):
 
 ## which to use
     import datetime
-    cls_models = {
-                  1: '2fc_rand',
-                  2: '3fc_rand',
-                  3: '3fc_ft' }
+    # cls_models = {
+    #               1: '2fc_rand',
+    #               2: '3fc_rand',
+    #               3: '3fc_ft' }
 
-    use_model = cls_models[int(cfg.use_model)]
-    print('use {}'.format(use_model))
+    use_model = cfg.use_model
+    print('use {}'.format(cfg.use_model))
     exp_prefix = cfg.exp_prefix
     total_epoch = 120
     initial_lr= 0.01
